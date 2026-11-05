@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Color Blitz</title>
+  <meta name="description" content="Fast online multiplayer color-matching card game for up to 10 friends. Match colors, stack +2s, shout BLITZ! at one card.">
+  <meta name="theme-color" content="#070b18">
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="vendor/fa/css/all.min.css">
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/game.css">
+  <script src="vendor/gsap.min.js"></script>
+  <script src="vendor/peerjs.min.js"></script>
+  <script src="vendor/mqtt.min.js"></script>
+  <script src="vendor/confetti.browser.js"></script>
+</head>
+<body>
+  <div id="sky" aria-hidden="true"></div>
+
+  <!-- HOME -->
+  <section id="home" class="screen active">
+    <div class="home-inner">
+      <div class="hero">
+        <div class="logo" aria-label="Color Blitz">
+          <span class="logo-top">COLOR</span>
+          <span class="logo-bottom">BLITZ</span>
+        </div>
+        <div id="hero-cards" class="hero-cards"></div>
+        <p class="tagline">Match colors. Stack +2s. Shout <b>BLITZ!</b> when you're down to one card.<br>Online multiplayer for 2–10 players. Free, no sign-up.</p>
+      </div>
+      <div class="home-card glass">
+        <label class="lbl" for="name">Your name</label>
+        <input id="name" class="input" maxlength="16" placeholder="e.g. Raj" autocomplete="off">
+        <div class="lbl">Pick your avatar</div>
+        <div id="token-pick" class="token-grid"></div>
+        <button id="btn-create" class="btn primary big"><i class="fa-solid fa-crown"></i> Create a room</button>
+        <div class="or"><span>or join friends</span></div>
+        <div class="join-row">
+          <input id="join-code" class="input code-input" maxlength="5" placeholder="ROOM CODE" autocomplete="off" spellcheck="false">
+          <button id="btn-join" class="btn accent"><i class="fa-solid fa-right-to-bracket"></i> Join</button>
+        </div>
+        <button id="btn-resume" class="btn ghost small" hidden></button>
+      </div>
+      <a class="rules-link" href="#" id="open-rules"><i class="fa-solid fa-book-open"></i> How to play</a>
+    </div>
+  </section>
+
+  <!-- LOBBY -->
+  <section id="lobby" class="screen">
+    <div class="lobby-wrap">
+      <div class="glass lobby-main">
+        <div class="lobby-head">
+          <button class="icon-btn" id="lobby-leave" title="Leave"><i class="fa-solid fa-arrow-left"></i></button>
+          <div class="room-code-box"><div class="muted small">ROOM CODE</div><div id="room-code" class="room-code">-----</div></div>
+          <div class="share">
+            <button class="btn small" id="copy-code"><i class="fa-regular fa-copy"></i> Code</button>
+            <button class="btn small accent" id="copy-link"><i class="fa-solid fa-link"></i> Invite link</button>
+          </div>
+        </div>
+        <div id="net-status" class="net-status"></div>
+        <h3 class="section-title">Players <span id="pcount" class="pill"></span></h3>
+        <div id="lobby-players" class="lobby-players"></div>
+        <div class="lobby-buttons">
+          <button class="btn" id="add-bot"><i class="fa-solid fa-robot"></i> Add bot</button>
+          <button class="btn primary big" id="start-game"><i class="fa-solid fa-play"></i> Start game</button>
+          <div id="lobby-wait" class="muted">Waiting for the host to start…</div>
+        </div>
+      </div>
+      <div class="glass lobby-side">
+        <h3 class="section-title">Room rules</h3>
+        <div class="setting"><span>Cards per hand</span><select id="set-hand"><option>5</option><option selected>7</option><option>10</option></select></div>
+        <div class="setting"><span>Stack +2 / +4 <i class="fa-solid fa-circle-info muted" title="Answer a +2 with a +2 (or +4) to pass the penalty on."></i></span><label class="switch"><input type="checkbox" id="set-stack" checked><i></i></label></div>
+        <div class="setting"><span>Play to</span><select id="set-target"><option value="0">1 round</option><option value="100">100 points</option><option value="300" selected>300 points</option><option value="500">500 points</option></select></div>
+        <div class="setting"><span>Turn timer</span><select id="set-timer"><option value="0">Off</option><option value="15">15 s</option><option value="30" selected>30 s</option><option value="60">60 s</option></select></div>
+        <h3 class="section-title">Your avatar</h3>
+        <div id="lobby-token" class="token-grid small"></div>
+        <h3 class="section-title">Chat</h3>
+        <div class="chat-box"><div id="lobby-chat" class="chat-list"></div>
+          <form class="chat-form" data-chat><input class="input" maxlength="200" placeholder="Say hi…"><button class="btn small"><i class="fa-solid fa-paper-plane"></i></button></form></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- GAME -->
+  <section id="game" class="screen">
+    <header class="topbar glass">
+      <div class="mini-logo"><span class="r">C</span><span class="y">O</span><span class="g">L</span><span class="b">O</span><span class="r">R</span> BLITZ</div>
+      <div class="room-chip" id="game-code" title="Copy invite link"></div>
+      <div class="info" id="top-info"></div>
+      <div class="tools">
+        <button class="icon-btn" id="btn-mute" title="Sound"><i class="fa-solid fa-volume-high"></i></button>
+        <button class="icon-btn" id="btn-rules" title="How to play"><i class="fa-solid fa-circle-question"></i></button>
+        <button class="icon-btn" id="btn-menu" title="Menu"><i class="fa-solid fa-ellipsis-vertical"></i></button>
+      </div>
+    </header>
+    <div id="table-wrap">
+      <div id="table">
+        <div id="dir-ring"><svg viewBox="0 0 200 200"><defs><marker id="ah" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="5" markerHeight="5" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#fff"/></marker></defs>
+          <path d="M100,8 A92,92 0 0,1 192,100" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" marker-end="url(#ah)"/>
+          <path d="M100,192 A92,92 0 0,1 8,100" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" marker-end="url(#ah)"/></svg></div>
+        <div id="center">
+          <div id="deck" class="pile" title="Draw a card"></div>
+          <div id="discard" class="pile"></div>
+          <div id="color-ind"></div>
+          <div id="pending" hidden></div>
+        </div>
+        <div id="seats"></div>
+      </div>
+    </div>
+    <div id="hand-area">
+      <div id="status"></div>
+      <div id="hand"></div>
+    </div>
+    <aside id="side" class="glass">
+      <div class="side-head">
+        <div class="tabs">
+          <button class="tab active" data-tab="scores"><i class="fa-solid fa-trophy"></i> Scores</button>
+          <button class="tab" data-tab="log"><i class="fa-solid fa-scroll"></i> Log</button>
+          <button class="tab" data-tab="chat"><i class="fa-solid fa-comments"></i> Chat<em class="badge-n" id="chat-badge" hidden></em></button>
+        </div>
+      </div>
+      <div class="tab-pane active" id="pane-scores"></div>
+      <div class="tab-pane" id="pane-log"></div>
+      <div class="tab-pane" id="pane-chat">
+        <div class="chat-box grow"><div id="game-chat" class="chat-list"></div>
+          <form class="chat-form" data-chat><input class="input" maxlength="200" placeholder="Talk trash politely…"><button class="btn small"><i class="fa-solid fa-paper-plane"></i></button></form></div>
+      </div>
+    </aside>
+  </section>
+
+  <div id="fx"></div>
+  <div id="modal-root"></div>
+  <div id="toasts"></div>
+  <div id="conn-overlay" hidden><div class="spinner"></div><div id="conn-text">Connecting…</div><button class="btn small ghost" id="conn-cancel">Cancel</button></div>
+  <div id="load-error" hidden style="position:fixed;left:16px;right:16px;bottom:16px;z-index:200;padding:14px 16px;border-radius:12px;background:#7f1d1d;color:#fff;font:600 14px/1.5 system-ui,sans-serif"></div>
+  <script>
+    window.addEventListener('error', function (e) {
+      var t = e.target;
+      if (t && (t.src || t.href)) {
+        var b = document.getElementById('load-error'); b.hidden = false;
+        b.textContent = 'Could not load ' + (t.src || t.href).split('/').slice(-2).join('/') + '. Make sure every folder (assets, css, dist, vendor) was uploaded next to index.html.';
+      }
+    }, true);
+  </script>
+  <script src="dist/game.js"></script>
+  <script>
+    if (!window.__cb) { var b = document.getElementById('load-error'); b.hidden = false; b.textContent = b.textContent || 'The game failed to start. Make sure the dist and vendor folders were uploaded next to index.html.'; }
+  </script>
+</body>
+</html>
